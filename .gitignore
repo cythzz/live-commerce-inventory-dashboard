@@ -207,7 +207,10 @@ tempCodeRunnerFile.py
 .ruff_cache/
 .idea/
 reports/*.csv
+reports/*.xlsx
 !reports/.gitkeep
+uploads/
+data/*.db
 
 # PyPI configuration file
 .pypirc

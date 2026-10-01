@@ -15,6 +15,31 @@ INVENTORY_COLUMNS = {
 }
 
 
+def validate_input_rows(sessions: pd.DataFrame, inventory: pd.DataFrame) -> None:
+    issues: list[str] = []
+    if sessions.empty:
+        issues.append("直播场次文件没有数据")
+    if inventory.empty:
+        issues.append("库存文件没有数据")
+
+    for column in ("duration_minutes", "viewers", "orders", "gmv", "refund_amount"):
+        numeric = pd.to_numeric(sessions[column], errors="coerce")
+        invalid_rows = sessions.index[numeric.isna() | (numeric < 0)]
+        if len(invalid_rows):
+            issues.append(f"直播场次字段 {column} 在行 {', '.join(str(index + 2) for index in invalid_rows[:5])} 非法")
+    for column in ("current_stock", "avg_daily_sales", "unit_cost"):
+        numeric = pd.to_numeric(inventory[column], errors="coerce")
+        invalid_rows = inventory.index[numeric.isna() | (numeric < 0)]
+        if len(invalid_rows):
+            issues.append(f"库存字段 {column} 在行 {', '.join(str(index + 2) for index in invalid_rows[:5])} 非法")
+    if sessions["session_id"].duplicated().any():
+        issues.append("session_id 存在重复值")
+    if inventory["sku"].duplicated().any():
+        issues.append("sku 存在重复值")
+    if issues:
+        raise ValueError("数据校验失败：" + "；".join(issues))
+
+
 def load_csv(path: Path, required_columns: set[str]) -> pd.DataFrame:
     frame = pd.read_csv(path)
     missing = required_columns.difference(frame.columns)
@@ -71,3 +96,18 @@ def generate_reports(data_dir: Path, report_dir: Path) -> tuple[Path, Path]:
     session_report.to_csv(session_path, index=False, encoding="utf-8-sig")
     inventory_report.to_csv(inventory_path, index=False, encoding="utf-8-sig")
     return session_path, inventory_path
+
+
+def generate_excel_report(
+    sessions_path: Path, inventory_path: Path, output_path: Path
+) -> Path:
+    sessions = load_csv(sessions_path, SESSION_COLUMNS)
+    inventory = load_csv(inventory_path, INVENTORY_COLUMNS)
+    validate_input_rows(sessions, inventory)
+    sessions = calculate_session_metrics(sessions)
+    inventory = calculate_inventory_health(inventory)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        sessions.to_excel(writer, sheet_name="直播场次指标", index=False)
+        inventory.to_excel(writer, sheet_name="库存健康度", index=False)
+    return output_path

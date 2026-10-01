@@ -1,8 +1,14 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from src.analytics import calculate_inventory_health, calculate_session_metrics, generate_reports
+from src.analytics import (
+    calculate_inventory_health,
+    calculate_session_metrics,
+    generate_reports,
+    validate_input_rows,
+)
 
 
 def test_calculates_session_conversion_and_order_value():
@@ -46,3 +52,16 @@ def test_generates_two_local_reports(tmp_path: Path):
     session_path, inventory_path = generate_reports(data_dir, tmp_path)
     assert session_path.exists()
     assert inventory_path.exists()
+
+
+def test_rejects_invalid_and_duplicate_input_rows():
+    sessions = pd.DataFrame([{
+        "session_id": "S1", "date": "2026-09-01", "host": "主播", "category": "美妆",
+        "duration_minutes": 60, "viewers": -1, "orders": 5, "gmv": 500, "refund_amount": 0,
+    }])
+    inventory = pd.DataFrame([{
+        "sku": "A", "product_name": "A", "category": "X", "current_stock": 1,
+        "avg_daily_sales": 1, "unit_cost": 1,
+    }])
+    with pytest.raises(ValueError, match="数据校验失败"):
+        validate_input_rows(sessions, inventory)
